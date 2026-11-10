@@ -12,14 +12,31 @@ h1{margin:0 0 8px;text-align:center;color:var(--ac)}
 #app{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;align-items:flex-start}
 .panel{background:var(--pn);border:2px solid #4a3c2c;border-radius:8px;padding:10px;width:240px}
 .panel h3{margin:0 0 6px;color:var(--ac);font-size:15px}
-#board{display:grid;grid-template-columns:repeat(6,60px);grid-template-rows:repeat(10,60px);background:#000;border:3px solid #4a3c2c}
-.c{position:relative;width:60px;height:60px;display:flex;align-items:center;justify-content:center;font-size:28px;border:4px solid transparent;cursor:default}
-.corr{background:#6b6258}.room{background:#8a5a3c}
-.w{border-color:#15110d}.d{border-color:#d9a441;border-style:dashed}
-.n{border-top-color:#15110d}
-.reach{outline:3px solid #4ade80;outline-offset:-5px;cursor:pointer}
-.hit{outline:3px solid #ef4444;outline-offset:-5px}
-.hp{position:absolute;bottom:0;right:2px;font-size:11px}
+#board{display:grid;grid-template-columns:repeat(6,64px);grid-template-rows:repeat(10,64px);border:4px solid #6b5535;border-radius:6px;box-shadow:0 0 25px #000;background:#201a14}
+.c{position:relative;width:64px;height:64px;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#241d16 0 6px,#1b1611 6px 12px)}
+.c i{position:absolute;display:block}
+.arm,.hub{background:radial-gradient(#b9a373 1px,transparent 1.5px) 0 0/7px 7px,#cdb98a;z-index:1}
+.hub{left:20px;top:20px;width:24px;height:24px}
+.an{left:20px;top:0;width:24px;height:32px}.as{left:20px;bottom:0;width:24px;height:32px}
+.ae{right:0;top:20px;width:32px;height:24px}.aw{left:0;top:20px;width:32px;height:24px}
+.rf{inset:4px;border:3px solid #4a2e1a;border-radius:7px;background:repeating-conic-gradient(#b87a4b 0 25%,#a46a3f 0 50%) 0 0/16px 16px;z-index:2;box-shadow:inset 0 0 12px #0008}
+.door{background:#5b3512;border:2px solid #f0c060;border-radius:2px;z-index:3}
+.drn{top:1px;left:21px;width:22px;height:9px}.drs{bottom:1px;left:21px;width:22px;height:9px}
+.dre{right:1px;top:21px;width:9px;height:22px}.drw{left:1px;top:21px;width:9px;height:22px}
+.st{position:absolute;bottom:1px;left:0;right:0;text-align:center;font-size:9px;color:#1b1713;z-index:3}
+.ic{font-size:30px;z-index:5;filter:drop-shadow(0 2px 2px #000)}
+.hp{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:10px;z-index:6}
+.tok{position:relative;z-index:6;width:42px;height:42px;border-radius:50%;background:radial-gradient(#3b6fd6,#1e3a8a);border:3px solid #ffd24a;display:flex;align-items:center;justify-content:center;font-size:24px;animation:glow 1.2s infinite alternate}
+.tok::after{content:'TU';position:absolute;top:-9px;background:#ffd24a;color:#1b1713;font:bold 9px sans-serif;padding:0 4px;border-radius:6px}
+.me::before{content:'';position:absolute;inset:1px;border:3px solid #ffd24a;border-radius:8px;z-index:4;box-shadow:0 0 14px #ffd24a;pointer-events:none}
+.reach{cursor:pointer}
+.reach::after{content:'';position:absolute;inset:16px;border-radius:50%;border:3px solid #4ade80;background:#4ade8040;z-index:7;animation:pulse 1s infinite alternate}
+.hit::after{content:'';position:absolute;inset:3px;border:3px solid #ef4444;border-radius:8px;z-index:4;box-shadow:0 0 10px #ef4444;pointer-events:none}
+@keyframes pulse{to{transform:scale(1.25);opacity:.6}}
+@keyframes glow{to{box-shadow:0 0 16px 4px #ffd24a}}
+.legend{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;font-size:12px;margin-top:6px}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend b{display:inline-block;width:16px;height:16px;border-radius:3px;border:2px solid #000}
 .dice{display:flex;gap:8px;justify-content:center;margin:6px 0}
 .die{width:52px;height:52px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff;font-weight:bold;border:2px solid #000}
 .g{background:#16a34a}.r{background:#dc2626}.k{background:#111}
@@ -60,6 +77,7 @@ ol{padding-left:18px;margin:0;font-size:13px}
  <div>
   <div class="msg" id="msg"></div>
   <div id="board"></div>
+  <div class="legend"><span><b style="background:#cdb98a"></b>Corridoio</span><span><b style="background:#a46a3f"></b>Stanza</span><span><b style="background:#5b3512;border-color:#f0c060"></b>Porta</span><span><b style="background:#241d16"></b>Roccia (muro)</span><span>🧔 Tu</span><span style="color:#4ade80">● Dove puoi andare</span></div>
  </div>
 
  <div class="panel">
@@ -229,23 +247,22 @@ function buy(p){
 function render(){
   const b=$('board');let h='';
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const o=G.open[y][x],r=G.room[x+','+y];
-    let cl='c '+(r?'room':'corr'),st='';
-    for(const d in DIRS){
-      const nx=x+DIRS[d][0],ny=y+DIRS[d][1];
-      const ext=nx<0||ny<0||nx>=W||ny>=H;
-      const bs={n:'Top',s:'Bottom',e:'Right',w:'Left'}[d];
-      if(!o[d]||ext)st+=`border${bs}-color:#15110d;`;
-      else if(!!G.room[nx+','+ny]!==!!r)st+=`border${bs}-color:#d9a441;border${bs}-style:dashed;`;
-    }
-    let content='',m=mAt(x,y);
-    if(x===G.px&&y===G.py)content='🪓';
-    else if(m)content='👹<span class="hp">'+'❤️'.repeat(m.hp)+'</span>';
-    else if(G.items[x+','+y]){const i=G.items[x+','+y];content={sword:'⚔️',shield:'🛡️',bow:'🏹',dagger:'🗡️',c1:'🪙',c3:'💰'}[i]}
-    let ex='';
-    if(G.steps>0&&!G.over){for(const d in DIRS)if(o[d]&&x===G.px+DIRS[d][0]&&y===G.py+DIRS[d][1]&&!m)ex=' reach" data-d="'+d}
+    const o=G.open[y][x],r=!!G.room[x+','+y],m=mAt(x,y),me=x===G.px&&y===G.py;
+    let inner='',cl='c',ex='';
+    for(const d in DIRS)if(o[d])inner+=`<i class="arm a${d}"></i>`;
+    if(r){inner+='<i class="rf"></i>';
+      for(const d in DIRS){const nx=x+DIRS[d][0],ny=y+DIRS[d][1];
+        if(o[d]&&nx>=0&&ny>=0&&nx<W&&ny<H&&!G.room[nx+','+ny])inner+=`<i class="door dr${d}"></i>`}
+    }else inner+='<i class="hub"></i>';
+    if(G.steps>0&&!G.over&&!m)for(const d in DIRS)if(o[d]&&x===G.px+DIRS[d][0]&&y===G.py+DIRS[d][1]){ex=` data-d="${d}"`;cl+=' reach'}
     if(m&&dist(m))cl+=' hit';
-    h+=`<div class="${cl}${ex}" style="${st}">${content}</div>`;
+    if(me)cl+=' me';
+    if(x===0&&y===H-1&&!r)inner+='<b class="st">START</b>';
+    let ct='';
+    if(me)ct='<span class="tok">🧔</span>';
+    else if(m)ct='<span class="ic">👹</span><span class="hp">'+'❤️'.repeat(m.hp)+'</span>';
+    else if(G.items[x+','+y])ct='<span class="ic">'+{sword:'⚔️',shield:'🛡️',bow:'🏹',dagger:'🗡️',c1:'🪙',c3:'💰'}[G.items[x+','+y]]+'</span>';
+    h+=`<div class="${cl}"${ex}>${inner}${ct}</div>`;
   }
   b.innerHTML=h;
   $('hearts').textContent='❤️'.repeat(Math.max(G.hp,0))+'🖤'.repeat(3-Math.max(G.hp,0));
