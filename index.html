@@ -167,6 +167,7 @@ function adj(m){const dx=Math.abs(m.x-G.px),dy=Math.abs(m.y-G.py);if(dx+dy!==1)r
   const dir=m.x>G.px?'e':m.x<G.px?'w':m.y>G.py?'s':'n';return G.open[G.py][G.px][dir]}
 
 function combat(m,who){
+  m.f=G.turn; // il mostro ha già combattuto in questo turno
   const r=d6(),b=d6();
   $('dr').textContent=FACE[r-1];$('dk').textContent=FACE[b-1];
   let t=`${who} 🔴${r} ⚫${b}: `;
@@ -198,17 +199,25 @@ function move(dir){
     else if(it==='dagger'&&G.w.sword){log('Hai già la spada, lasci il pugnale.')}
     else{G.w[it]=1;if(it==='sword')G.w.dagger=0;log('Trovi: '+{sword:'⚔️ Spada (+3 danni)',shield:'🛡️ Scudo (+2 difesa)',bow:'🏹 Arco (+2 danni, gittata 2)',dagger:'🗡️ Pugnale (+1 danni)'}[it]);delete G.items[k]}
   }
-  render();
+  render();checkAuto();
 }
 function rollMove(){
   if(G.over||G.rolled)return;
-  const v=d6();G.rolled=1;G.steps=v;$('dg').textContent=FACE[v-1];log(`🟢 Dado verde: ${v} passi`);render();
+  const v=d6();G.rolled=1;G.steps=v;$('dg').textContent=FACE[v-1];log(`🟢 Dado verde: ${v} passi`);render();checkAuto();
 }
 function attack(){
   if(G.over||G.attacked)return;
   const ts=G.monsters.filter(m=>dist(m)).sort((a,b)=>dist(a)-dist(b));
   if(!ts.length)return;
-  G.attacked=1;combat(ts[0],'Barbaro attacca:');render();
+  G.attacked=1;combat(ts[0],'Barbaro attacca:');render();checkAuto();
+}
+function checkAuto(){ // fine turno automatico quando non restano mosse né attacchi
+  if(G.over||!G.rolled||G.pend)return;
+  const canMove=G.steps>0&&Object.keys(DIRS).some(d=>G.open[G.py][G.px][d]&&!mAt(G.px+DIRS[d][0],G.py+DIRS[d][1]));
+  const canAtk=!G.attacked&&G.monsters.some(dist);
+  if(canMove||canAtk)return;
+  G.pend=1;const t=G.turn,g=G;
+  setTimeout(()=>{if(G===g&&G.pend&&G.turn===t){log('⏭️ Fine turno automatico');endTurn()}},900);
 }
 function bfs(m){ // prossimo passo verso il giocatore
   const q=[[m.x,m.y]],prev={};prev[m.x+','+m.y]=null;
@@ -222,10 +231,11 @@ function bfs(m){ // prossimo passo verso il giocatore
 }
 function endTurn(){
   if(G.over)return;
+  G.pend=0;
   if(G.pot.invis<=0){
     for(const m of [...G.monsters]){
       if(G.over)break;
-      if(adj(m)){combat(m,'Mostro attacca:');continue}
+      if(adj(m)){if(m.f!==G.turn)combat(m,'Mostro attacca:');continue}
       const p=bfs(m);
       if(p.length&&p.length<=6){
         const [nx,ny]=p[0].split(',').map(Number);
