@@ -87,7 +87,6 @@ ol{padding-left:18px;margin:0;font-size:13px}
   <div style="text-align:center">
    <button id="bRoll">🎲 Tira dado verde</button>
    <button id="bAtk">⚔️ Attacca</button>
-   <button id="bEnd">⏭️ Fine turno</button>
   </div>
   <p style="font-size:12px">Passi: <b id="steps">0</b> (frecce o click sulle caselle verdi)</p>
   <h3>🏪 Negozio (5 monete)</h3>
@@ -258,7 +257,7 @@ function endTurn(){
       if(G.over)break;
       if(adj(m)){if(m.f!==G.turn)combat(m,'Mostro attacca:');continue}
       const p=bfs(m);
-      if(p.length&&p.length<=6){
+      if(p.length&&p.length<=2){ // si muove solo se il barbaro è a 2 caselle, altrimenti resta di guardia
         const [nx,ny]=p[0].split(',').map(Number);
         if(!(nx===G.px&&ny===G.py)&&!mAt(nx,ny)){m.x=nx;m.y=ny}
       }
@@ -308,7 +307,6 @@ function render(){
   $('buffs').textContent=[G.pot.invis&&`👻 ${G.pot.invis}t`,G.pot.dmg&&`🗡️ +2 ${G.pot.dmg}t`,G.pot.def&&`🛡️ +1 ${G.pot.def}t`].filter(Boolean).join('  ');
   $('bRoll').disabled=G.over||G.rolled;
   $('bAtk').disabled=G.over||G.attacked||G.pend||!G.monsters.some(dist);
-  $('bEnd').disabled=G.over;
   document.querySelectorAll('[data-p]').forEach(e=>e.disabled=G.over||G.coins<5);
 }
 
@@ -317,7 +315,7 @@ document.addEventListener('keydown',e=>{
   const k={ArrowUp:'n',ArrowDown:'s',ArrowLeft:'w',ArrowRight:'e'}[e.key];
   if(k){e.preventDefault();move(k)}
 });
-$('bRoll').onclick=rollMove;$('bAtk').onclick=attack;$('bEnd').onclick=endTurn;$('bNew').onclick=newGame;
+$('bRoll').onclick=rollMove;$('bAtk').onclick=attack;$('bNew').onclick=newGame;
 document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>buy(b.dataset.p));
 
 // ---------- Supabase (REST) ----------
