@@ -37,6 +37,11 @@ h1{margin:0 0 8px;text-align:center;color:var(--ac)}
 .legend{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;font-size:12px;margin-top:6px}
 .legend span{display:flex;align-items:center;gap:4px}
 .legend b{display:inline-block;width:16px;height:16px;border-radius:3px;border:2px solid #000}
+#modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:99}
+.mbox{background:#2a231c;border:3px solid #d9a441;border-radius:10px;padding:16px;max-width:340px;width:92%}
+.mbox h3{margin:0 0 8px;color:#d9a441}
+.opt{display:block;width:100%;text-align:left;margin:8px 0;padding:10px;font-size:14px}
+.opt small{font-weight:normal}
 .dice{display:flex;gap:8px;justify-content:center;margin:6px 0}
 .die{width:52px;height:52px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff;font-weight:bold;border:2px solid #000}
 .g{background:#16a34a}.r{background:#dc2626}.k{background:#111}
@@ -104,6 +109,7 @@ ol{padding-left:18px;margin:0;font-size:13px}
  </div>
 </div>
 
+<div id="modal"></div>
 <script>
 const SUPABASE_URL='https://erukzvrtjnvyzjvfuirn.supabase.co';
 const SUPABASE_KEY='sb_publishable_FDhQ03affjzeyhCHuoKulg_Rp7PdyLM';
@@ -139,7 +145,7 @@ function newGame(){
   rooms.forEach(([x,y],i)=>{
     room[x+','+y]=1;
     if(i<6)monsters.push({x,y,hp:2});
-    else if(i-6<loot.length)items[x+','+y]=loot[i-6];
+    else if(i-6<loot.length)items[x+','+y]=[loot[i-6]];
   });
   G={open,room,items,monsters,px:0,py:H-1,hp:5,coins:0,gold:0,kills:0,total:monsters.length,
      w:{sword:0,dagger:0,bow:0,shield:0},pot:{invis:0,dmg:0,def:0},steps:0,rolled:0,attacked:0,over:0,turn:1,saved:0};
@@ -170,10 +176,10 @@ function combat(m,who){
   const r=d6(),b=d6();
   $('dr').textContent=FACE[r-1];$('dk').textContent=FACE[b-1];
   let t=`${who} 🔴${r} ⚫${b}: `;
-  const mh=b-defB()>r,ph=r+dmgB()>b;
+  const near=!!adj(m),mh=near&&b-defB()>r,ph=r+dmgB()>b;
   if(mh){G.hp--;t+='il mostro ferisce il barbaro! '}
   if(ph){m.hp--;t+='il barbaro ferisce il mostro! '}
-  if(!mh&&!ph)t+='nessun danno.';
+  if(!near&&!ph)t+='il mostro è a distanza e non può colpirti.';else if(!mh&&!ph)t+='nessun danno.';
   log(t);
   if(m.hp<=0){G.monsters=G.monsters.filter(x=>x!==m);G.coins++;G.gold++;G.kills++;log('💀 Mostro ucciso! +1 moneta');}
   if(G.hp<=0)end(false);
@@ -185,24 +191,49 @@ function end(won){
 }
 function score(won){return G.kills*10+G.gold*2+(won?50:0)-G.turn}
 
+const NAMES={sword:'⚔️ Spada (+3 danni)',dagger:'🗡️ Pugnale (+1 danni)',bow:'🏹 Arco (+2 danni, tiro a 2 caselle)',shield:'🛡️ Scudo (+2 difesa)'};
+const mainW=()=>['sword','dagger','bow'].find(k=>G.w[k])||null;
 function step(dir){
-  if(G.over||G.pend||G.steps<=0||!G.open[G.py][G.px][dir])return;
+  if(G.over||G.pend||G.choice||G.steps<=0||!G.open[G.py][G.px][dir])return;
   const nx=G.px+DIRS[dir][0],ny=G.py+DIRS[dir][1];
   if(mAt(nx,ny)){log('Un mostro blocca la strada: attaccalo!');return}
   G.px=nx;G.py=ny;G.steps--;
-  const k=nx+','+ny,it=G.items[k];
-  if(it){
-    if(it[0]==='c'){const v=+it[1];G.coins+=v;G.gold+=v;log(`💰 Trovi ${v} moneta/e d'oro`);delete G.items[k]}
-    else if(it==='shield'&&G.w.bow){if(confirm('Hai l\'arco: prendere lo scudo ti fa lasciare l\'arco. Scambiare?')){G.w.bow=0;G.w.shield=1;log('🛡️ Scudo preso, arco lasciato');delete G.items[k]}}
-    else if(it==='bow'&&G.w.shield){if(confirm('Hai lo scudo: prendere l\'arco ti fa lasciare lo scudo. Scambiare?')){G.w.shield=0;G.w.bow=1;log('🏹 Arco preso, scudo lasciato');delete G.items[k]}}
-    else if(it==='dagger'&&G.w.sword){log('Hai già la spada, lasci il pugnale.')}
-    else{G.w[it]=1;if(it==='sword')G.w.dagger=0;log('Trovi: '+{sword:'⚔️ Spada (+3 danni)',shield:'🛡️ Scudo (+2 difesa)',bow:'🏹 Arco (+2 danni, gittata 2)',dagger:'🗡️ Pugnale (+1 danni)'}[it]);delete G.items[k]}
-  }
+  const k=nx+','+ny,l=G.items[k]||[];
+  l.filter(i=>i[0]==='c').forEach(i=>{const v=+i[1];G.coins+=v;G.gold+=v;log(`💰 Trovi ${v} moneta/e d'oro`)});
+  G.items[k]=l.filter(i=>i[0]!=='c');if(!G.items[k].length)delete G.items[k];
 }
-function move(dir){step(dir);render();checkAuto()}
+function arrive(){ // all'arrivo: eventuali scelte sull'equipaggiamento
+  const k=G.px+','+G.py,l=(G.items[k]||[]).filter(i=>i[0]!=='c');
+  if(l.length)offer(k,[...l]);else{render();checkAuto()}
+}
+function offer(k,queue){
+  if(!queue.length){render();checkAuto();return}
+  const y=queue.shift(),x=mainW();let drop=[];
+  if(y==='shield'){if(G.w.shield){offer(k,queue);return}if(x==='bow')drop=['bow']}
+  else{if(x===y){offer(k,queue);return}if(x)drop.push(x);if(y==='bow'&&G.w.shield)drop.push('shield')}
+  if(!drop.length){take(k,y,[]);offer(k,queue);return}
+  G.choice=1;render();
+  const cur=['sword','dagger','bow','shield'].filter(w=>G.w[w]).map(w=>NAMES[w]);
+  const why=(y==='bow'||drop.includes('bow'))&&(G.w.shield||y==='shield')?'Arco e scudo non si possono usare insieme.':'Puoi tenere una sola arma alla volta.';
+  const m=$('modal');
+  m.innerHTML=`<div class="mbox"><h3>Hai trovato: ${NAMES[y]}</h3><p style="font-size:14px">Equipaggiamento attuale:<br><b>${cur.join('<br>')}</b></p><p style="font-size:13px;color:#d9a441">${why} Cosa fai?</p>
+   <button class="opt" id="oKeep">✋ Tieni quello che hai<br><small>lasci qui: ${NAMES[y]}</small></button>
+   <button class="opt" id="oTake">🎒 Prendi ${NAMES[y]}<br><small>posi: ${drop.map(d=>NAMES[d]).join(' + ')}</small></button></div>`;
+  m.style.display='flex';
+  const done=()=>{m.style.display='none';G.choice=0;offer(k,queue)};
+  $('oKeep').onclick=()=>{log('Lasci '+NAMES[y]+' a terra.');done()};
+  $('oTake').onclick=()=>{take(k,y,drop);done()};
+}
+function take(k,y,drop){
+  const l=G.items[k]||[];l.splice(l.indexOf(y),1);
+  G.w[y]=1;drop.forEach(d=>{G.w[d]=0;l.push(d)});
+  G.items[k]=l;if(!l.length)delete G.items[k];
+  log('🎒 Prendi '+NAMES[y]+(drop.length?', posi '+drop.map(d=>NAMES[d]).join(' + '):''));
+}
+function move(dir){step(dir);arrive()}
 function reach(){ // caselle realmente raggiungibili entro i passi rimasti (niente muri, niente mostri)
   const res={},q=[[G.px,G.py,[]]],seen={[G.px+','+G.py]:1};
-  if(G.over||G.pend)return res;
+  if(G.over||G.pend||G.choice)return res;
   while(q.length){
     const [x,y,p]=q.shift();
     if(p.length>=G.steps)continue;
@@ -218,21 +249,21 @@ function reach(){ // caselle realmente raggiungibili entro i passi rimasti (nien
 function moveTo(k){
   const p=reach()[k];if(!p)return;
   for(const d of p){const px=G.px,py=G.py;step(d);if(G.px===px&&G.py===py)break}
-  render();checkAuto();
+  arrive();
 }
 function rollMove(){
-  if(G.over||G.rolled)return;
+  if(G.over||G.rolled||G.choice)return;
   const v=d6();G.rolled=1;G.steps=v;$('dg').textContent=FACE[v-1];log(`🟢 Dado verde: ${v} passi`);render();checkAuto();
 }
 function attack(){
-  if(G.over||G.attacked||G.pend)return;
+  if(G.over||G.attacked||G.pend||G.choice)return;
   const ts=G.monsters.filter(m=>dist(m)).sort((a,b)=>dist(a)-dist(b));
   if(!ts.length)return;
   G.attacked=1;combat(ts[0],'Barbaro attacca:');render();
   if(!G.over){G.pend=1;const t=G.turn,g=G;setTimeout(()=>{if(G===g&&G.pend&&G.turn===t)endTurn()},1000)} // l'attacco chiude il turno
 }
 function checkAuto(){ // fine turno automatico quando non restano mosse né attacchi
-  if(G.over||!G.rolled||G.pend)return;
+  if(G.over||!G.rolled||G.pend||G.choice)return;
   const canMove=G.steps>0&&Object.keys(DIRS).some(d=>G.open[G.py][G.px][d]&&!mAt(G.px+DIRS[d][0],G.py+DIRS[d][1]));
   const canAtk=!G.attacked&&G.monsters.some(dist);
   if(canMove||canAtk)return;
@@ -291,7 +322,7 @@ function render(){
     let ct='';
     if(me)ct='<span class="tok">🧔</span>';
     else if(m)ct='<span class="ic">👹</span><span class="hp">'+'❤️'.repeat(m.hp)+'</span>';
-    else if(G.items[x+','+y])ct='<span class="ic">'+{sword:'⚔️',shield:'🛡️',bow:'🏹',dagger:'🗡️',c1:'🪙',c3:'💰'}[G.items[x+','+y]]+'</span>';
+    else if((G.items[x+','+y]||[]).length){const l=G.items[x+','+y];ct='<span class="ic">'+{sword:'⚔️',shield:'🛡️',bow:'🏹',dagger:'🗡️',c1:'🪙',c3:'💰'}[l[0]]+'</span>'+(l.length>1?'<span class="hp">+'+(l.length-1)+'</span>':'')}
     h+=`<div class="${cl}"${ex}>${inner}${ct}</div>`;
   }
   b.innerHTML=h;
